@@ -1,6 +1,8 @@
 #ifndef PCASERIAL_H_
 #define PCASERIAL_H_
 #include "helpers.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 void computeMeanVector(float **data, int amountOfElements, int dimension, float *meanVectors);
 void calculateCovarianceMatrix(float **data, int amountOfElements, int dimension, float *meanVectors,float **covarianceMatrix);

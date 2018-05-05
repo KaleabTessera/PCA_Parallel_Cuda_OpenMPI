@@ -1,5 +1,6 @@
 #ifndef HELPERS_H_
 #define HELPERS_H_
+#include <string.h>
 
 void printAllData(float **array, int amountOfElements,int dimension);
 void loadAllData(float **data, FILE *fp);
