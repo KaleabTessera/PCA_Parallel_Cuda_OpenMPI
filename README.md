@@ -7,3 +7,8 @@ PCA implemented in:
   -Parallel
     :Cuda C
     :OpenMP
+
+How to Run:
+	Install GNU library : sudo apt-get install libgsl0-dev
+	make
+	./pcaSerial
