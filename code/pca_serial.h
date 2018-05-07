@@ -179,6 +179,7 @@ float **computeEigenValues(float **covarianceMatrix, int dimension, int dimensio
 float **transformSamplesToNewSubspace(float **allData, float **eigenVectorMatrix, int r1, int c1, int r2, int c2)
 {
     float **newValues = matrixMultiplication(allData, eigenVectorMatrix, r1, c1, r2, c2);
+    return newValues;
 }
 
 float **matrixMultiplication(float **matrixA, float **matrixB, int r1, int c1, int r2, int c2)
