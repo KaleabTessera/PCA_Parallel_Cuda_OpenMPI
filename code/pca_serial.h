@@ -5,11 +5,12 @@
 #include <stdlib.h>
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_eigen.h>
+#include <time.h>
 
 float *computeMeanVector(float **data, int amountOfElements, int dimension);
 float **calculateCovarianceMatrix(float **data, int amountOfElements, int dimension, float *meanVectors);
 void getCovarianceMatrix(float **dataTranspose, float **data, float *meanVectors, int dimension, int amountOfElements, float **covarianceMatrix);
-float ** computeEigenValues(float **covarianceMatrix, int dimension, int dimensionToMapTo);
+float **computeEigenValues(float **covarianceMatrix, int dimension, int dimensionToMapTo);
 float **transformSamplesToNewSubspace(float **allData, float **eigenVectorMatrix, int r1, int c1, int r2, int c2);
 float **matrixMultiplication(float **matrixA, float **matrixB, int r1, int c1, int r2, int c2);
 void pca_serial(int amountOfElements, int dimension, int dimensionToMapTo)
@@ -32,10 +33,30 @@ void pca_serial(int amountOfElements, int dimension, int dimensionToMapTo)
     printf("\nInitial Data \n");
     printAllData(allData, amountOfElements, dimension);
 
+    printf("\nTimes taken for %d elements dimension of %d, mapping to %d principal compoments. \n",amountOfElements,dimension,dimensionToMapTo);
+    clock_t beginMV = clock();
     float *meanVectors = computeMeanVector(allData, amountOfElements, dimension);
+    clock_t endMV = clock();
+    double time_spentMV = (double)(endMV - beginMV) / CLOCKS_PER_SEC;
+    printf("Time to calculate mean vector: %f \n", time_spentMV);
+
+    clock_t beginCV = clock();
     float **covarianceMatrix = calculateCovarianceMatrix(allData, amountOfElements, dimension, meanVectors);
-    float **eigenVectorMatrix =  computeEigenValues(covarianceMatrix, dimension, dimensionToMapTo);
+    clock_t endCV = clock();
+    double time_spentCV = (double)(endCV - beginCV) / CLOCKS_PER_SEC;
+    printf("Time to calculate co variance matrix: %f \n", time_spentCV);
+
+    clock_t beginEV = clock();
+    float **eigenVectorMatrix = computeEigenValues(covarianceMatrix, dimension, dimensionToMapTo);
+    clock_t endEV = clock();
+    double time_spentEV = (double)(endEV - beginEV) / CLOCKS_PER_SEC;
+    printf("Time to calculate eigenvalues: %f \n", time_spentEV);
+
+    clock_t beginNV = clock();
     float **newValues = transformSamplesToNewSubspace(allData, eigenVectorMatrix, amountOfElements, dimension, dimension, dimensionToMapTo);
+    clock_t endNV = clock();
+    double time_spentNV = (double)(endNV - beginNV) / CLOCKS_PER_SEC;
+    printf("Time to map inputs to %d principal components: %f \n", dimensionToMapTo, time_spentNV);
 
     printf("\nData after PCA to %d principal components \n", dimensionToMapTo);
     printAllData(newValues, amountOfElements, dimensionToMapTo);
@@ -58,7 +79,7 @@ float *computeMeanVector(float **data, int amountOfElements, int dimension)
     return meanVectors;
 }
 
-float** calculateCovarianceMatrix(float **data, int amountOfElements, int dimension, float *meanVectors)
+float **calculateCovarianceMatrix(float **data, int amountOfElements, int dimension, float *meanVectors)
 {
     float **covarianceMatrix = (float **)malloc(sizeof(float *) * dimension);
     for (int i = 0; i < dimension; i++)
@@ -102,7 +123,7 @@ void getCovarianceMatrix(float **dataTranspose, float **data, float *meanVectors
     }
 }
 
-float ** computeEigenValues(float **covarianceMatrix, int dimension, int dimensionToMapTo)
+float **computeEigenValues(float **covarianceMatrix, int dimension, int dimensionToMapTo)
 {
     float **eigenVectorMatrix = (float **)malloc(sizeof(float *) * dimension);
     for (int i = 0; i < dimension; i++)
