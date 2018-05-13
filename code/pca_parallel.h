@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#define TILE_WIDTH 2
 
 float *computeMeanVector(float *data, int amountOfElements, int dimension);
 float *calculateCovarianceMatrix(float *data, int amountOfElements, int dimension, float *meanVectors);
@@ -18,6 +19,9 @@ __constant__ float d_meanVectors[4];
 __global__ void meanVectorParallel(float *matrix, float *meanVector);
 __global__ void covarianceMatrixParallel(float *dataTranspose);
 __global__ void test(float *dataTranspose, float *data, float *covarianceMatrix);
+__global__ void covarianceMatrixParallelSharedMemory(float *matrixA, float *matrixB, float *outputMatrix,
+                               int r1, int c1,
+                               int r2, int c2);
 
 void pca_parallel(int amountOfElements, int dimension, int dimensionToMapTo)
 {
@@ -102,8 +106,8 @@ __global__ void meanVectorParallel(float *matrix, float *meanVector)
     unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
     for (int i = 0; i < d_amountOfElements; i++)
         sum += matrix[idx + i * d_dimension];
-}
-meanVector[idx] = sum / d_amountOfElements;
+
+    meanVector[idx] = sum / d_amountOfElements;
 }
 
 __global__ void covarianceMatrixParallel(float *dataTranspose, float *data, float *covarianceMatrix)
@@ -133,24 +137,52 @@ __global__ void covarianceMatrixParallel(float *dataTranspose, float *data, floa
     //  }
 }
 
-__global__ void covarianceMatrixParallelSharedMemory(float *dataTranspose, float *data, float *covarianceMatrix)
+//Adapted from https://gist.github.com/ironmanMA/41f6edaab6389b5f50bb
+__global__ void covarianceMatrixParallelSharedMemory(float *matrixA, float *matrixB, float *outputMatrix,
+                               int r1, int c1,
+                               int r2, int c2)
 {
-    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-
-    int r1 = d_dimension;
-    int c2 = d_dimension;
-    int c1 = d_amountOfElements;
-
-    float sum = 0.0;
-    for (int k = 0; k < c1; ++k)
+    __shared__ float ds_M[TILE_WIDTH][TILE_WIDTH];
+    __shared__ float ds_N[TILE_WIDTH][TILE_WIDTH];
+    int bx = blockIdx.x, by = blockIdx.y,
+        tx = threadIdx.x, ty = threadIdx.y,
+        Row = by * TILE_WIDTH + ty,
+        Col = bx * TILE_WIDTH + tx;
+    float Pvalue = 0;
+    for (int m = 0; m < (c1 - 1) / TILE_WIDTH + 1; m++)
     {
-        sum += (dataTranspose[row * c1 + k] - d_meanVectors[row]) * (data[k * c2 + col] - d_meanVectors[col]);
-    }
+        float meanV_M = d_meanVectors[ty];
+        float meanV_N = d_meanVectors[tx];
+        if (Row < r1 && m * TILE_WIDTH + tx < c1)
+            ds_M[ty][tx] = matrixA[Row * c1 + m * TILE_WIDTH + tx];
+        else
+        {
+            ds_M[ty][tx] = 0;
+        }
+        if (Col < c2 && m * TILE_WIDTH + ty < r2)
+            ds_N[ty][tx] = matrixB[(m * TILE_WIDTH + ty) * c2 + Col];
+        else
+        {
+            ds_N[ty][tx] = 0;
+        }
 
-    covarianceMatrix[row * d_dimension + col] = sum / (d_amountOfElements - 1);
+        __syncthreads();
+        for (int k = 0; k < TILE_WIDTH; ++k)
+        {
+            if (ds_M[ty][k] != 0.0 && ds_N[k][tx] != 0.0)
+            {
+                
+                Pvalue += (ds_M[ty][k] - d_meanVectors[Row]) * (ds_N[k][tx] - d_meanVectors[Col]);
+                // if ((Row == 2 && Col == 2))
+                // {
+                //     printf("(%f(%d) - %f) + (%f(%d) - %f)  sum: Pvalue: %f\n", ds_M[ty][k], ty * r1 + k, meanV_M, ds_N[k][tx], k * r2 + tx, meanV_N,Pvalue);
+                // }
+            }
+        }
+        __syncthreads();
+    }
+    if (Row < r1 && Col < c2)
+        outputMatrix[Row * c2 + Col] = Pvalue / (d_amountOfElements - 1);
 }
 
 float *calculateCovarianceMatrix(float *data, int amountOfElements, int dimension, float *meanVectors)
@@ -166,6 +198,7 @@ float *calculateCovarianceMatrix(float *data, int amountOfElements, int dimensio
             dataTranspose[j * amountOfElements + i] = data[i * dimension + j];
         }
     }
+    printAllData1D(dataTranspose, dimension, amountOfElements);
 
     float *d_data, *d_covarianceMatrix, *d_dataTranspose;
     cudaMalloc((void **)&d_data, sizeof(float) * amountOfElements * dimension);
@@ -183,13 +216,26 @@ float *calculateCovarianceMatrix(float *data, int amountOfElements, int dimensio
     dim3 dimGrid(numBlocks, numBlocks, 1);
     dim3 dimBlock(BLOCK_WIDTH, BLOCK_WIDTH, 1);
 
-    covarianceMatrixParallel<<<dimGrid, dimBlock>>>(d_dataTranspose, d_data, d_covarianceMatrix);
+    covarianceMatrixParallelSharedMemory<<<dimGrid, dimBlock>>>(d_dataTranspose, d_data, d_covarianceMatrix,
+                                          4, 5,
+                                          5, 4);
+
+    // matrixMultiply<<<dimGrid, dimBlock>>>(d_data, d_dataTranspose, d_covarianceMatrix,
+    //                                       4, 5,
+    //                                       5, 4,
+    //                                       4, 4);
+    //covarianceMatrixParallelSharedMemory<<<dimGrid, dimBlock>>>(d_dataTranspose, d_data, d_covarianceMatrix);
     cudaMemcpy(covarianceMatrix, d_covarianceMatrix, sizeArrayMemoryCovariancematrix, cudaMemcpyDeviceToHost);
-    // cudaError err = cudaGetLastError();
-    // if ( cudaSuccess != err )
+    // for (int i = 0; i < 16; i++)
     // {
-    //     printf("%s\n", cudaGetErrorString(err));
+    //     printf("%f \n", covarianceMatrix[i]);
     // }
+    //printAllData1D(covarianceMatrix,4,4);
+    cudaError err = cudaGetLastError();
+    if (cudaSuccess != err)
+    {
+        printf("%s\n", cudaGetErrorString(err));
+    }
     return covarianceMatrix;
 }
 
