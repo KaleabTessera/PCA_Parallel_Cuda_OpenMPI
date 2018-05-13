@@ -1,6 +1,6 @@
 #ifndef PCASERIAL_H_
 #define PCASERIAL_H_
-#include "helpers.h"
+#include "../helpers.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <gsl/gsl_math.h>
@@ -13,9 +13,12 @@ void getCovarianceMatrix(float **dataTranspose, float **data, float *meanVectors
 float **computeEigenValues(float **covarianceMatrix, int dimension, int dimensionToMapTo);
 float **transformSamplesToNewSubspace(float **allData, float **eigenVectorMatrix, int r1, int c1, int r2, int c2);
 float **matrixMultiplication(float **matrixA, float **matrixB, int r1, int c1, int r2, int c2);
-void pca_serial(int amountOfElements, int dimension, int dimensionToMapTo)
+void pca_serial(int amountOfElements, int dimension, int dimensionToMapTo, int numOfRuns)
 {
-    FILE *fp = fopen("../data/data.txt", "r");
+    float *timeArray = (float *)malloc(sizeof(float) * numOfRuns * 4);
+    int timeArrayIndex = 0;
+
+    FILE *fp = fopen("../../data/mnist.csv", "r");
     if (fp == NULL)
     {
         perror("Error in opening file");
@@ -28,38 +31,50 @@ void pca_serial(int amountOfElements, int dimension, int dimensionToMapTo)
         allData[i] = (float *)malloc(sizeof(float) * dimension);
     }
 
-    loadAllData(allData, fp);
+    loadAllData(allData, fp, amountOfElements, dimension);
 
-    printf("\nInitial Data \n");
-    printAllData(allData, amountOfElements, dimension);
+    // printf("\nInitial Data \n");
+    // printAllData(allData, amountOfElements, dimension);
+    for (int r = 0; r < numOfRuns; r++)
+    {
+        printf("\nTimes taken for %d elements dimension of %d, mapping to %d principal compoments. \n", amountOfElements, dimension, dimensionToMapTo);
+        clock_t beginMV = clock();
+        float *meanVectors = computeMeanVector(allData, amountOfElements, dimension);
+        clock_t endMV = clock();
+        float time_spentMV = (float)(endMV - beginMV) / CLOCKS_PER_SEC;
+        timeArray[timeArrayIndex++] = time_spentMV;
+        printf("Time to calculate mean vector: %f \n", time_spentMV);
 
-    printf("\nTimes taken for %d elements dimension of %d, mapping to %d principal compoments. \n",amountOfElements,dimension,dimensionToMapTo);
-    clock_t beginMV = clock();
-    float *meanVectors = computeMeanVector(allData, amountOfElements, dimension);
-    clock_t endMV = clock();
-    double time_spentMV = (double)(endMV - beginMV) / CLOCKS_PER_SEC;
-    printf("Time to calculate mean vector: %f \n", time_spentMV);
+        clock_t beginCV = clock();
+        float **covarianceMatrix = calculateCovarianceMatrix(allData, amountOfElements, dimension, meanVectors);
+        clock_t endCV = clock();
+        float time_spentCV = (float)(endCV - beginCV) / CLOCKS_PER_SEC;
+        timeArray[timeArrayIndex++] = time_spentCV;
+        printf("Time to calculate co variance matrix: %f \n", time_spentCV);
 
-    clock_t beginCV = clock();
-    float **covarianceMatrix = calculateCovarianceMatrix(allData, amountOfElements, dimension, meanVectors);
-    clock_t endCV = clock();
-    double time_spentCV = (double)(endCV - beginCV) / CLOCKS_PER_SEC;
-    printf("Time to calculate co variance matrix: %f \n", time_spentCV);
+        clock_t beginEV = clock();
+        float **eigenVectorMatrix = computeEigenValues(covarianceMatrix, dimension, dimensionToMapTo);
+        clock_t endEV = clock();
+        float time_spentEV = (float)(endEV - beginEV) / CLOCKS_PER_SEC;
+        timeArray[timeArrayIndex++] = time_spentEV;
+        printf("Time to calculate eigenvalues: %f \n", time_spentEV);
 
-    clock_t beginEV = clock();
-    float **eigenVectorMatrix = computeEigenValues(covarianceMatrix, dimension, dimensionToMapTo);
-    clock_t endEV = clock();
-    double time_spentEV = (double)(endEV - beginEV) / CLOCKS_PER_SEC;
-    printf("Time to calculate eigenvalues: %f \n", time_spentEV);
+        clock_t beginNV = clock();
+        float **newValues = transformSamplesToNewSubspace(allData, eigenVectorMatrix, amountOfElements, dimension, dimension, dimensionToMapTo);
+        clock_t endNV = clock();
+        float time_spentNV = (float)(endNV - beginNV) / CLOCKS_PER_SEC;
+        timeArray[timeArrayIndex++] = time_spentNV;
+        printf("Time to map inputs to %d principal components: %f \n", dimensionToMapTo, time_spentNV);
 
-    clock_t beginNV = clock();
-    float **newValues = transformSamplesToNewSubspace(allData, eigenVectorMatrix, amountOfElements, dimension, dimension, dimensionToMapTo);
-    clock_t endNV = clock();
-    double time_spentNV = (double)(endNV - beginNV) / CLOCKS_PER_SEC;
-    printf("Time to map inputs to %d principal components: %f \n", dimensionToMapTo, time_spentNV);
+        // printf("\nData after PCA to %d principal components \n", dimensionToMapTo);
+        // printAllData(newValues, amountOfElements, dimensionToMapTo);
+    }
 
-    printf("\nData after PCA to %d principal components \n", dimensionToMapTo);
-    printAllData(newValues, amountOfElements, dimensionToMapTo);
+    FILE *f = fopen("results.csv", "w");
+    fprintf(f, "MeanVector,CoVariance,Eigenvalues,Map inputs \n");
+    printAllData1DToFile(timeArray, numOfRuns, 4, f);
+    printAllData1D(timeArray, numOfRuns, 4);
+    fclose(f);
 }
 
 float *computeMeanVector(float **data, int amountOfElements, int dimension)
@@ -101,14 +116,14 @@ float **calculateCovarianceMatrix(float **data, int amountOfElements, int dimens
 
     getCovarianceMatrix(dataTranspose, data, meanVectors, dimension, amountOfElements, covarianceMatrix);
 
-    for (int j = 0; j < dimension; j++)
-    {
-        for (int i = 0; i < dimension; i++)
-        {
-            printf("%f",covarianceMatrix[j][i]);
-        }
-        printf("\n");
-    }
+    // for (int j = 0; j < dimension; j++)
+    // {
+    //     for (int i = 0; i < dimension; i++)
+    //     {
+    //         printf("%f", covarianceMatrix[j][i]);
+    //     }
+    //     printf("\n");
+    // }
     return covarianceMatrix;
 }
 
@@ -126,15 +141,7 @@ void getCovarianceMatrix(float **dataTranspose, float **data, float *meanVectors
             for (int k = 0; k < c1; ++k)
             {
                 sum += (dataTranspose[i][k] - meanVectors[i]) * (data[k][j] - meanVectors[j]);
-                // if((i == 1  && j==0)){
-                //     printf("(%f - %f) * (%f - %f)",dataTranspose[i][k],meanVectors[i],data[k][j],meanVectors[j]);
-                
-                // printf("\n");
-                // }
             }
-            // if((i == 1  && j==0)){
-            //     printf("sum: %f",sum / (amountOfElements - 1));
-            // }
             covarianceMatrix[i][j] = sum / (amountOfElements - 1);
         }
     }

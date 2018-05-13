@@ -1,55 +1,85 @@
 #ifndef HELPERS_H_
 #define HELPERS_H_
 #include <string.h>
+#include <math.h>
+#include <omp.h>
 
 void printAllData(float **array, int amountOfElements, int dimension);
-void loadAllData(float **data, FILE *fp);
-void loadData(float *data, char buf[512]);
+void loadAllData(float **data, FILE *fp, int amountOfElements, int dimension);
+void loadData(float *data, char buf[4096], int dimension);
 
-void loadAllData(float **data, FILE *fp)
+void loadAllData(float **data, FILE *fp, int amountOfElements, int dimension)
 {
-    char buf[512];
+    char buf[4096];
     int index = 0;
+    int lineNumber = 0;
+    int maxNumLinesRead = amountOfElements;
 
-    while (fgets(buf, sizeof(buf), fp) != NULL)
+    while (fgets(buf, sizeof(buf), fp) != NULL && (lineNumber < maxNumLinesRead))
     {
-        loadData(data[index], buf);
-        index++;
+        if (lineNumber > 0)
+        {
+            loadData(data[index], buf, dimension);
+            index++;
+        }
+        lineNumber++;
     }
 }
 
-void loadAllData1D(float *data, FILE *fp)
+void loadAllData1D(float *data, FILE *fp, int amountOfElements, int dimension)
 {
-    char buf[512];
+    char buf[4096];
     int index = 0;
-
-    while (fgets(buf, sizeof(buf), fp) != NULL)
+    int lineNumber = 0;
+    int maxNumLinesRead = amountOfElements;
+    while (fgets(buf, sizeof(buf), fp) != NULL && (lineNumber < maxNumLinesRead))
     {
+        int numColumns = dimension;
         int count = 0;
+        int indexC = 0;
         buf[strlen(buf) - 1] = '\0';
         const char delimeter[2] = ",";
         char *token = strtok(buf, delimeter);
-        //printf(token);
-        while (token != NULL)
+        float num;
+        while (token != NULL && count < numColumns)
         {
-            sscanf(token, "%f,", &data[count]);
+            sscanf(token, "%f,", &num);
+            if (count > 0)
+            {
+                if (isnan(num))
+                {
+                    num = 0;
+                }
+                data[indexC] = num;
+                indexC++;
+            }
             token = strtok(NULL, delimeter);
             count = count + 1;
         }
-        index++;
     }
 }
 
-void loadData(float *data, char buf[512])
+void loadData(float *data, char buf[4096], int dimension)
 {
+    int numColumns = dimension;
     int count = 0;
+    int index = 0;
     buf[strlen(buf) - 1] = '\0';
     const char delimeter[2] = ",";
     char *token = strtok(buf, delimeter);
-    //printf(token);
-    while (token != NULL)
+    float num;
+    while (token != NULL && count < numColumns)
     {
-        sscanf(token, "%f,", &data[count]);
+        sscanf(token, "%f,", &num);
+        if (count > 0)
+        {
+            if (isnan(num))
+            {
+                num = 0;
+            }
+            data[index] = num;
+            index++;
+        }
         token = strtok(NULL, delimeter);
         count = count + 1;
     }
@@ -61,9 +91,27 @@ void printAllData(float **array, int amountOfElements, int dimension)
     {
         for (int j = 0; j < dimension; j++)
         {
-            printf("%f ", array[i][j]);
+            if(j == (dimension-1)){
+                printf("%f", array[i][j]);
+            }
+            else printf("%f,", array[i][j]);
         }
         printf("\n");
+    }
+}
+
+void printAllDataToFile(float **array, int amountOfElements, int dimension,FILE *file)
+{
+    for (int i = 0; i < amountOfElements; i++)
+    {
+        for (int j = 0; j < dimension; j++)
+        {
+            if(j == (dimension-1)){
+                fprintf(file,"%f", array[i][j]);
+            }
+            else fprintf(file,"%f,", array[i][j]);
+        }
+        fprintf(file,"\n");
     }
 }
 
@@ -73,10 +121,30 @@ void printAllData1D(float *array, int amountOfElements, int dimension)
     {
         for (int j = 0; j < dimension; j++)
         {
-            printf("%f ", array[i * dimension + j]);
+            if(j ==(dimension-1)){
+                printf("%f", array[i * dimension + j]);
+            }
+            else printf("%f,", array[i * dimension + j]);
         }
         printf("\n");
     }
 }
+
+void printAllData1DToFile(float *array, int amountOfElements, int dimension,FILE *file)
+{
+    for (int i = 0; i < amountOfElements; i++)
+    {
+        for (int j = 0; j < dimension; j++)
+        {
+            if((j ==(dimension-1))){
+                fprintf(file,"%f", array[i * dimension + j]);
+            }
+            else fprintf(file,"%f,", array[i * dimension + j]);
+        }
+        fprintf(file,"\n");
+    }
+}
+
+// void addTimeArray(double *time, int)
 
 #endif

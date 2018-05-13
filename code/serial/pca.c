@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "pca_parallel_openmp.h"
+#include "pca_serial.h"
 #define AMOUNT_ELEMENTS 10000
 #define DIMENSION 1000
 #define DIMENSIONTOMAPTO 3
@@ -7,7 +7,7 @@
 
 int main()
 {
-   pca_parallel_openmp(AMOUNT_ELEMENTS,DIMENSION,DIMENSIONTOMAPTO,NUM_RUNS);
+   pca_serial(AMOUNT_ELEMENTS,DIMENSION,DIMENSIONTOMAPTO,NUM_RUNS);
    return 0;
 }
 
