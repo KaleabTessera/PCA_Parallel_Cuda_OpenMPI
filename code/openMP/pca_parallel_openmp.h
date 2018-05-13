@@ -138,20 +138,28 @@ void getCovarianceMatrix(float **dataTranspose, float **data, float *meanVectors
     int c2 = dimension;
     int c1 = amountOfElements;
 
-#pragma omp parallel for num_threads(4) schedule(static,8)
+#pragma omp parallel num_threads(4) 
+{
+    #pragma omp for schedule(static,8) reduction(+: sum) 
     for (int i = 0; i < r1; i++)
     {
         for (int j = 0; j < c2; j++)
         {
-            covarianceMatrix[i][j] = 0;
+            sum = 0;
             float mV1 = meanVectors[i];
             float mV2 = meanVectors[j];
             for (int k = 0; k < c1; k++)
             {
-                covarianceMatrix[i][j] += (dataTranspose[i][k] - mV1) * (data[k][j] - mV2);
+                sum += (dataTranspose[i][k] - mV1) * (data[k][j] - mV2);
+            }
+
+#pragma omp critical
+            {
+                covarianceMatrix[i][j] = sum;
             }
         }
     }
+}
 }
 
 float **computeEigenValues(float **covarianceMatrix, int dimension, int dimensionToMapTo)
