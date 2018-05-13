@@ -100,6 +100,15 @@ float **calculateCovarianceMatrix(float **data, int amountOfElements, int dimens
     }
 
     getCovarianceMatrix(dataTranspose, data, meanVectors, dimension, amountOfElements, covarianceMatrix);
+
+    for (int j = 0; j < dimension; j++)
+    {
+        for (int i = 0; i < dimension; i++)
+        {
+            printf("%f",covarianceMatrix[j][i]);
+        }
+        printf("\n");
+    }
     return covarianceMatrix;
 }
 
@@ -116,8 +125,16 @@ void getCovarianceMatrix(float **dataTranspose, float **data, float *meanVectors
             sum = 0.0;
             for (int k = 0; k < c1; ++k)
             {
-                sum += (dataTranspose[i][k] - meanVectors[j]) * (data[k][j] - meanVectors[j]);
+                sum += (dataTranspose[i][k] - meanVectors[i]) * (data[k][j] - meanVectors[j]);
+                // if((i == 1  && j==0)){
+                //     printf("(%f - %f) * (%f - %f)",dataTranspose[i][k],meanVectors[i],data[k][j],meanVectors[j]);
+                
+                // printf("\n");
+                // }
             }
+            // if((i == 1  && j==0)){
+            //     printf("sum: %f",sum / (amountOfElements - 1));
+            // }
             covarianceMatrix[i][j] = sum / (amountOfElements - 1);
         }
     }
