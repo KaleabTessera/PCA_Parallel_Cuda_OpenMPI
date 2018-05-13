@@ -15,7 +15,7 @@ float **transformSamplesToNewSubspace(float **allData, float **eigenVectorMatrix
 float **matrixMultiplication(float **matrixA, float **matrixB, int r1, int c1, int r2, int c2);
 void pca_parallel_openmp(int amountOfElements, int dimension, int dimensionToMapTo, int numOfRuns)
 {
-    float *timeArray= (float *)malloc(sizeof(float ) * numOfRuns*4);
+    float *timeArray = (float *)malloc(sizeof(float) * numOfRuns * 4);
     int timeArrayIndex = 0;
 
     FILE *fp = fopen("../../data/mnist.csv", "r");
@@ -69,20 +69,19 @@ void pca_parallel_openmp(int amountOfElements, int dimension, int dimensionToMap
 
         printf("\nData after PCA to %d principal components \n", dimensionToMapTo);
         //printAllData(newValues, amountOfElements, dimensionToMapTo);
-
     }
 
     FILE *f = fopen("results.csv", "w");
-    fprintf(f,"MeanVector,CoVariance,Eigenvalues,Map inputs \n");
-    printAllData1DToFile(timeArray,numOfRuns,4,f);
-    printAllData1D(timeArray,numOfRuns,4);
+    fprintf(f, "MeanVector,CoVariance,Eigenvalues,Map inputs \n");
+    printAllData1DToFile(timeArray, numOfRuns, 4, f);
+    printAllData1D(timeArray, numOfRuns, 4);
     fclose(f);
 }
 
 float *computeMeanVector(float **data, int amountOfElements, int dimension)
 {
     float *meanVectors = (float *)malloc(sizeof(float) * dimension);
-#pragma omp parallel for schedule(dynamic, 1) num_threads(8)
+#pragma omp parallel for schedule(dynamic) num_threads(4)
     for (int j = 0; j < dimension; j++)
     {
         float mean = 0.0;
@@ -109,7 +108,8 @@ float **calculateCovarianceMatrix(float **data, int amountOfElements, int dimens
     {
         dataTranspose[i] = (float *)malloc(sizeof(float) * amountOfElements);
     }
-#pragma omp parallel for schedule(dynamic, 1) collapse(2) num_threads(8)
+
+#pragma omp parallel for schedule(dynamic) collapse(2) num_threads(4)
     for (int j = 0; j < dimension; j++)
     {
         for (int i = 0; i < amountOfElements; i++)
@@ -138,15 +138,17 @@ void getCovarianceMatrix(float **dataTranspose, float **data, float *meanVectors
     int c2 = dimension;
     int c1 = amountOfElements;
 
-#pragma omp parallel for schedule(dynamic, 1) shared(covarianceMatrix)
-    for (int i = 0; i < r1; ++i)
+#pragma omp parallel for num_threads(4) schedule(static,8)
+    for (int i = 0; i < r1; i++)
     {
-        for (int j = 0; j < c2; ++j)
+        for (int j = 0; j < c2; j++)
         {
             covarianceMatrix[i][j] = 0;
-            for (int k = 0; k < c1; ++k)
+            float mV1 = meanVectors[i];
+            float mV2 = meanVectors[j];
+            for (int k = 0; k < c1; k++)
             {
-                covarianceMatrix[i][j] += (dataTranspose[i][k] - meanVectors[i]) * (data[k][j] - meanVectors[j]);
+                covarianceMatrix[i][j] += (dataTranspose[i][k] - mV1) * (data[k][j] - mV2);
             }
         }
     }
