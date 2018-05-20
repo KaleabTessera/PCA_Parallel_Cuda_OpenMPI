@@ -11,7 +11,7 @@ float *computeMeanVector(float **data, int amountOfElements, int dimension);
 float **calculateCovarianceMatrix(float **data, int amountOfElements, int dimension, float *meanVectors);
 void getCovarianceMatrix(float **dataTranspose, float **data, float *meanVectors, int dimension, int amountOfElements, float **covarianceMatrix);
 float **computeEigenValues(float **covarianceMatrix, int dimension, int dimensionToMapTo);
-float **transformSamplesToNewSubspace(float **allData, float **eigenVectorMatrix, int r1, int c1, int r2, int c2);
+float **transformSamplesToNewSubspace(float **allData, float **eigenVectorMatrix, float *meanVectors, int r1, int c1, int r2, int c2);
 float **matrixMultiplication(float **matrixA, float **matrixB, int r1, int c1, int r2, int c2);
 void pca_parallel_openmp(int amountOfElements, int dimension, int dimensionToMapTo, int numOfRuns)
 {
@@ -61,7 +61,7 @@ void pca_parallel_openmp(int amountOfElements, int dimension, int dimensionToMap
         printf("Time to calculate eigenvalues: %f \n", time_spentEV);
 
         clock_t beginNV = clock();
-        float **newValues = transformSamplesToNewSubspace(allData, eigenVectorMatrix, amountOfElements, dimension, dimension, dimensionToMapTo);
+        float **newValues = transformSamplesToNewSubspace(allData, eigenVectorMatrix, meanVectors, amountOfElements, dimension, dimension, dimensionToMapTo);
         clock_t endNV = clock();
         float time_spentNV = (float)(endNV - beginNV) / CLOCKS_PER_SEC;
         timeArray[timeArrayIndex++] = time_spentNV;
@@ -71,11 +71,19 @@ void pca_parallel_openmp(int amountOfElements, int dimension, int dimensionToMap
         //printAllData(newValues, amountOfElements, dimensionToMapTo);
     }
 
-    FILE *f = fopen("results.csv", "w");
+    char fileNameDistance[200];
+    sprintf(fileNameDistance, "results/results_%d_%d_%d.csv", amountOfElements, dimension, dimensionToMapTo);
+    printf("%s", fileNameDistance);
+    FILE *f = fopen(fileNameDistance, "w");
+    if (f == NULL)
+    {
+        perror("Error in opening file");
+        exit(EXIT_FAILURE);
+    }
     fprintf(f, "MeanVector,CoVariance,Eigenvalues,Map inputs \n");
     printAllData1DToFile(timeArray, numOfRuns, 4, f);
-    printAllData1D(timeArray, numOfRuns, 4);
     fclose(f);
+    fclose(fp);
 }
 
 float *computeMeanVector(float **data, int amountOfElements, int dimension)
@@ -119,15 +127,6 @@ float **calculateCovarianceMatrix(float **data, int amountOfElements, int dimens
     }
 
     getCovarianceMatrix(dataTranspose, data, meanVectors, dimension, amountOfElements, covarianceMatrix);
-
-    // for (int j = 0; j < dimension; j++)
-    // {
-    //     for (int i = 0; i < dimension; i++)
-    //     {
-    //         printf("%f",covarianceMatrix[j][i]);
-    //     }
-    //     printf("\n");
-    // }
     return covarianceMatrix;
 }
 
@@ -179,6 +178,7 @@ float **computeEigenValues(float **covarianceMatrix, int dimension, int dimensio
         }
     }
 
+    gsl_set_error_handler_off();
     gsl_matrix_view m = gsl_matrix_view_array(data, dimension, dimension);
 
     gsl_vector_complex *eval = gsl_vector_complex_alloc(dimension);
@@ -214,10 +214,40 @@ float **computeEigenValues(float **covarianceMatrix, int dimension, int dimensio
     return eigenVectorMatrix;
 }
 
-float **transformSamplesToNewSubspace(float **allData, float **eigenVectorMatrix, int r1, int c1, int r2, int c2)
+float **transformSamplesToNewSubspace(float **allData, float **eigenVectorMatrix, float *meanVectors, int r1, int c1, int r2, int c2)
 {
-    float **newValues = matrixMultiplication(allData, eigenVectorMatrix, r1, c1, r2, c2);
+    // float **newValues = matrixMultiplication(allData, eigenVectorMatrix, r1, c1, r2, c2);
+    // return newValues;
+
+    float **newValues = (float **)malloc(sizeof(float *) * r1);
+    for (int i = 0; i < r1; i++)
+    {
+        newValues[i] = (float *)malloc(sizeof(float) * c2);
+    }
+    transformSamples(allData, eigenVectorMatrix, meanVectors, r1, c1, r2, c2, newValues);
     return newValues;
+}
+
+void transformSamples(float **dataTranspose, float **data, float *meanVectors, int r1, int c1, int r2, int c2, float **newValues)
+{
+    float sum;
+    #pragma omp parallel for schedule(dynamic, 1) shared(newValues) reduction(+ \
+                                                                       : sum)
+    for (int i = 0; i < r1; ++i)
+    {
+        for (int j = 0; j < c2; ++j)
+        {
+            sum = 0.0;
+            for (int k = 0; k < c1; ++k)
+            {
+                sum += ((dataTranspose[i][k] - meanVectors[k]) * (data[k][j])) * (data[k][j]);
+            }
+            #pragma omp critical
+            {
+                newValues[i][j] = meanVectors[j] + sum;;
+            }
+        }
+    }
 }
 
 float **matrixMultiplication(float **matrixA, float **matrixB, int r1, int c1, int r2, int c2)

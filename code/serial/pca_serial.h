@@ -74,7 +74,7 @@ void pca_serial(int amountOfElements, int dimension, int dimensionToMapTo, int n
     }
 
     char fileNameDistance[200];
-    sprintf(fileNameDistance, "results_%d_%d_%d.csv", amountOfElements, dimension, dimensionToMapTo);
+    sprintf(fileNameDistance, "results/results_%d_%d_%d.csv", amountOfElements, dimension, dimensionToMapTo);
     printf("%s", fileNameDistance);
     FILE *f = fopen(fileNameDistance, "w");
     if (f == NULL)
@@ -85,7 +85,7 @@ void pca_serial(int amountOfElements, int dimension, int dimensionToMapTo, int n
     fprintf(f, "MeanVector,CoVariance,Eigenvalues,Map inputs \n");
     printAllData1DToFile(timeArray, numOfRuns, 4, f);
     fclose(f);
-     fclose(fp);
+    fclose(fp);
 }
 
 float *computeMeanVector(float **data, int amountOfElements, int dimension)
